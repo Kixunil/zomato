@@ -1,0 +1,29 @@
+[package]
+edition = "2018"
+name = "zomato"
+version = "0.1.0"
+authors = ["Martin Habovštiak <martin.habovstiak@gmail.com>"]
+description = "A simple crate for retrievig daily menu from zomato.com"
+homepage = "https://github.com/Kixunil/zomato"
+repository = "https://github.com/Kixunil/zomato"
+readme = "README.md"
+keywords = ["zomato", "scraper", "async"]
+categories = ["api-bindings"]
+license = "MITNFA"
+
+[features]
+# Activates verbose debug logging
+debug-log = []
+
+[dependencies]
+reqwest = "0.10.1"
+scraper = "0.11.0"
+anyhow = "1.0.26"
+
+[dev-dependencies]
+tokio = {version = "0.2.8", features = ["full"]}
+fmt2io = "0.1"
+# optional = true would be nice, but isn't allowed
+# see https://github.com/rust-lang/cargo/issues/1596
+simple_logger = { version = "1.4" }
+mktemp = "0.4.0"
