@@ -4,19 +4,9 @@ use std::fmt;
 ///
 /// This currently implements only `Debug` and `Display`. New traits/methods may be implemented in
 /// the future.
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
 pub struct Error (anyhow::Error);
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
 
 /// Food within daily menu.
 pub struct MenuItem {

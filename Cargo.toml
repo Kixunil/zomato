@@ -19,6 +19,7 @@ debug-log = []
 reqwest = "0.10.1"
 scraper = "0.11.0"
 anyhow = "1.0.26"
+thiserror = "1.0.7"
 
 [dev-dependencies]
 tokio = {version = "0.2.8", features = ["full"]}
