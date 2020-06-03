@@ -1,4 +1,4 @@
-use std::fmt;
+use serde_derive::Deserialize;
 
 /// Error returned when fetching fails.
 ///
@@ -38,11 +38,47 @@ pub async fn get_daily_menu(city: &str, restaurant: &str) -> Result<Vec<Menu>, E
     get_daily_menu_internal(city, restaurant).await.map_err(Error)
 }
 
+#[derive(Deserialize, Debug)]
+struct InternalMenuItem {
+    name: String,
+    #[serde(rename = "displayPrice")]
+    price: String,
+}
+
+#[derive(Deserialize)]
+struct DailyMenu {
+    dishes: Vec<InternalMenuItem>,
+    #[serde(rename = "timeHeading")]
+    date: String,
+}
+
+#[derive(Deserialize)]
+struct Sections {
+    #[serde(rename = "SECTION_DAILY_MENU")]
+    daily_menu: Vec<DailyMenu>,
+}
+
+#[derive(Deserialize)]
+struct UnknownObject {
+    sections: Sections,
+}
+
+#[derive(Deserialize)]
+struct Pages {
+    restaurant: std::collections::HashMap<String, UnknownObject>,
+}
+
+#[derive(Deserialize)]
+struct Data {
+    pages: Pages,
+}
+
 // We use internal function with `anyhow::Error` for convenience and it gets translated into our
 // `Error` in the public function. This allows us to maintain ability to extend error type with
 // information, while making it easy to write the initial version of library.
 async fn get_daily_menu_internal(city: &str, restaurant: &str) -> Result<Vec<Menu>, anyhow::Error> {
     use scraper::Selector;
+    use anyhow::Context;
 
     let url = format!("https://www.zomato.com/{}/{}/daily-menu", city, restaurant);
     #[cfg(feature = "debug-log")]
@@ -72,62 +108,49 @@ async fn get_daily_menu_internal(city: &str, restaurant: &str) -> Result<Vec<Men
         .await?;
     let response_decoded = std::str::from_utf8(&response)?;
     let html = scraper::Html::parse_document(response_decoded);
-    let tmi_group_name = Selector::parse(".tmi-group-name").unwrap();
-    let tmi_daily = Selector::parse(".tmi-daily").unwrap();
-    let tmi_name = Selector::parse(".tmi-name").unwrap();
-    let tmi_price = Selector::parse(".tmi-price div.row").unwrap();
-    let result = html
-        .select(&Selector::parse("#daily-menu-container .tmi-group").unwrap())
+    let script = html
+        .select(&Selector::parse("script").unwrap())
         .into_iter()
-        .map(|day| {
-            let date = day
-                .select(&tmi_group_name)
+        .filter_map(|script| script.text().next())
+        .find(|script| script.contains("window.__PRELOADED_STATE__ = JSON.parse(\""))
+        .ok_or_else(|| anyhow::anyhow!("data not found"))?;
+
+    let mut iter = script.split("window.__PRELOADED_STATE__ = JSON.parse(\"");
+    iter.next().expect("empty split");
+    let json_with_tail = iter.next().expect("missing pattern");
+    let json_escaped = json_with_tail.split("\")\n").next().expect("empty split");
+    let mut json_unescaped = String::with_capacity(json_escaped.len());
+    for piece in json_escaped.split("\\\"") {
+        if !json_unescaped.is_empty() {
+            json_unescaped.push_str("\"");
+        }
+        json_unescaped.push_str(piece);
+    }
+    let data = serde_json::from_str::<Data>(&json_unescaped).context("failed to parse json")?;
+    let result = data
+        .pages
+        .restaurant
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("missing restaurant"))?
+        .1
+        .sections.daily_menu
+        .into_iter()
+        .map(|menu| {
+            let items = menu
+                .dishes
                 .into_iter()
-                .next()
-                .ok_or("missing group name")
-                .map_err(anyhow::Error::msg)?
-                .text()
-                .next()
-                .ok_or("missing text of group name")
-                .map_err(anyhow::Error::msg)?
-                .trim()
-                .to_owned();
-
-            let items = day
-                .select(&tmi_daily)
-                .into_iter()
-                .map(|food| {
-                    let food_description = food
-                        .select(&tmi_name)
-                        .into_iter()
-                        .next()
-                        .ok_or("missing food description")
-                        .map_err(anyhow::Error::msg)?
-                        .text()
-                        .next()
-                        .ok_or("missing text of food description")
-                        .map_err(anyhow::Error::msg)?
-                        .trim()
-                        .to_owned();
-
-                    let price = food
-                        .select(&tmi_price)
-                        .into_iter()
-                        .next()
-                        .ok_or("missing price")
-                        .map_err(anyhow::Error::msg)?
-                        .text()
-                        .next()
-                        .ok_or("missing text of price")
-                        .map_err(anyhow::Error::msg)?
-                        .trim()
-                        .to_owned();
-
-                    Ok(MenuItem { description: food_description, price })
+                .map(|item| MenuItem {
+                    description: item.name,
+                    price: item.price,
                 })
-                .collect::<Result<_, anyhow::Error>>()?;
-            Ok(Menu { date, items, })
+                .collect::<Vec<_>>();
+            Menu {
+                items,
+                date: menu.date,
+            }
         })
-        .collect::<Result<_, anyhow::Error>>()?;
+        .collect::<Vec<_>>();
+
     Ok(result)
 }

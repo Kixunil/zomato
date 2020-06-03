@@ -1,7 +1,7 @@
 [package]
 edition = "2018"
 name = "zomato"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Martin Habovštiak <martin.habovstiak@gmail.com>"]
 description = "A simple crate for retrievig daily menu from zomato.com"
 homepage = "https://github.com/Kixunil/zomato"
@@ -20,6 +20,9 @@ reqwest = "0.10.1"
 scraper = "0.11.0"
 anyhow = "1.0.26"
 thiserror = "1.0.7"
+serde = "1.0.110"
+serde_derive = "1.0.110"
+serde_json = "1.0.53"
 
 [dev-dependencies]
 tokio = {version = "0.2.8", features = ["full"]}
